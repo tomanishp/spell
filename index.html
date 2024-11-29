@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Word Game</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #000000;
+        }
+
+        .dark-mode {
+            --bg-color: #333333;
+            --text-color: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .hamburger {
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .title {
+            text-align: center;
+            flex: 1;
+            margin: 0 1rem;
+            word-wrap: break-word;
+        }
+
+        .gear {
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .content {
+            max-width: 800px;
+            margin: 2rem auto;
+            text-align: center;
+        }
+
+        .image-container img {
+            max-width: 100%;
+            height: 150px;
+            margin-bottom: 2rem;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .letter-box {
+            border: 2px solid #4CAF50;
+            padding: 2rem;
+            font-size: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: move;
+            user-select: none;
+            transition: background-color 0.3s;
+            touch-action: none;
+            /* Prevents scrolling while touching elements */
+        }
+
+        .letter-box.correct {
+            background-color: lightgreen;
+        }
+
+        .letter-box.dragging {
+            opacity: 0.5;
+            position: relative;
+            z-index: 1000;
+        }
+
+        @media (max-width: 768px) {
+            .letter-box {
+                padding: 1.5rem;
+                font-size: 1.5rem;
+            }
+        }
+
+
+        .next-button {
+            padding: 1rem 2rem;
+            font-size: 1.2rem;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .dark-mode-panel {
+            display: none;
+            position: absolute;
+            right: 10px;
+            top: 60px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--text-color);
+            padding: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="hamburger">☰</div>
+        <h1 class="title">Image Word Game</h1>
+        <div class="gear">⚙️</div>
+    </div>
+
+    <div class="dark-mode-panel">
+        <label>
+            <input type="checkbox" id="darkModeToggle"> Dark Mode
+        </label>
+    </div>
+
+    <div class="content">
+        <div class="image-container">
+            <img id="currentImage" src="" alt="Current Image">
+        </div>
+        <div class="grid-container" id="letterGrid"></div>
+        <button class="next-button">Next Set</button>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            // Sample arrays (replace with your actual data)
+            const imageUrls = [
+                'images/cat.jpg',
+                'images/dog.jpg',
+                'images/bat.jpg'
+            ];
+
+            const words = [
+                'CAT',
+                'DOG',
+                'BAT'
+            ];
+
+            let currentIndex = 0;
+            let dragSrcEl = null;
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let synth = window.speechSynthesis;
+            let speaking = false;
+
+            function speakWord(word) {
+                // If already speaking, stop it
+                if (speaking) {
+                    synth.cancel();
+                }
+
+                // Create new utterance
+                const utterance = new SpeechSynthesisUtterance(word);
+
+                // Get available voices
+                let voices = synth.getVoices();
+
+                // Try to find an English voice
+                let englishVoice = voices.find(voice => voice.lang.startsWith('en-'));
+                if (englishVoice) {
+                    utterance.voice = englishVoice;
+                }
+
+                // Set properties
+                utterance.pitch = 1;
+                utterance.rate = 0.8;
+                utterance.volume = 1;
+
+                // Track speaking state
+                speaking = true;
+                utterance.onend = () => {
+                    speaking = false;
+                };
+
+                // Speak the word
+                synth.speak(utterance);
+            }
+
+            function shuffleString(str) {
+                let arr = str.split('');
+                for (let i = arr.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [arr[i], arr[j]] = [arr[j], arr[i]];
+                }
+                return arr;
+            }
+
+            function checkWord() {
+                const currentWord = words[currentIndex];
+                const arrangedWord = $('.letter-box')
+                    .map(function () { return $(this).text(); })
+                    .get()
+                    .join('');
+
+                if (currentWord === arrangedWord) {
+                    $('.letter-box').addClass('correct');
+                    // Speak the word when correct
+                    speakWord(currentWord);
+                    return true;
+                }
+                $('.letter-box').removeClass('correct');
+                return false;
+            }
+
+            function updateDisplay() {
+                // Update image
+                $('#currentImage').attr('src', imageUrls[currentIndex]);
+
+                // Update letter grid
+                const word = words[currentIndex];
+                const shuffledLetters = shuffleString(word);
+                const $grid = $('#letterGrid');
+                $grid.empty();
+
+                // Add shuffled letters to grid
+                shuffledLetters.forEach(letter => {
+                    $grid.append(`<div class="letter-box" draggable="true">${letter}</div>`);
+                });
+
+                // Initialize drag and drop for new elements
+                initializeDragAndDrop();
+            }
+
+            function initializeDragAndDrop() {
+                const letterBoxes = document.querySelectorAll('.letter-box');
+
+                letterBoxes.forEach(box => {
+                    box.addEventListener('dragstart', function (e) {
+                        this.classList.add('dragging');
+                        e.dataTransfer.setData('text/plain', this.innerHTML);
+                        e.dataTransfer.effectAllowed = 'move';
+                    });
+
+                    box.addEventListener('dragend', function () {
+                        this.classList.remove('dragging');
+                    });
+
+                    box.addEventListener('dragover', function (e) {
+                        e.preventDefault();
+                    });
+
+                    box.addEventListener('drop', function (e) {
+                        e.preventDefault();
+
+                        const draggedText = e.dataTransfer.getData('text/plain');
+                        const draggedElement = document.querySelector('.dragging');
+                        const targetText = this.innerHTML;
+
+                        // Swap the text content
+                        this.innerHTML = draggedText;
+                        draggedElement.innerHTML = targetText;
+
+                        // Check if word is correct after swap
+                        checkWord();
+                    });
+                });
+            }
+
+            // Initialize display
+            updateDisplay();
+
+            // Initialize voices when they are loaded
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = function () {
+                    // Voices are now loaded
+                    synth.getVoices();
+                };
+            }
+
+            // Next button click handler with random selection
+            $('.next-button').click(function () {
+                // Cancel any ongoing speech when moving to next word
+                if (speaking) {
+                    synth.cancel();
+                    speaking = false;
+                }
+                $('.letter-box').removeClass('correct');
+                currentIndex = Math.floor(Math.random() * imageUrls.length);
+                updateDisplay();
+            });
+            // Gear icon click handler
+            $('.gear').click(function () {
+                $('.dark-mode-panel').toggle();
+            });
+
+            // Dark mode toggle
+            $('#darkModeToggle').change(function () {
+                $('body').toggleClass('dark-mode');
+            });
+
+            // Hide dark mode panel when clicking outside
+            $(document).click(function (event) {
+                if (!$(event.target).closest('.gear, .dark-mode-panel').length) {
+                    $('.dark-mode-panel').hide();
+                }
+            });
+
+        });
+    </script>
+</body>
+
+</html>
