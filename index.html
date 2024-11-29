@@ -88,16 +88,31 @@
             background-color: lightgreen;
         }
 
+        .letter-box.dragover {
+            background-color: rgba(76, 175, 80, 0.2);
+            /* Light green with transparency */
+            border: 2px dashed #4CAF50;
+        }
+
         .letter-box.dragging {
             opacity: 0.5;
             position: relative;
             z-index: 1000;
+            background-color: #f0f0f0;
         }
 
+        /* Make touch targets bigger on mobile */
         @media (max-width: 768px) {
             .letter-box {
                 padding: 1.5rem;
                 font-size: 1.5rem;
+                min-height: 60px;
+                /* Ensure minimum touch target size */
+            }
+
+            .grid-container {
+                gap: 0.5rem;
+                /* Smaller gap on mobile */
             }
         }
 
@@ -247,38 +262,119 @@
 
             function initializeDragAndDrop() {
                 const letterBoxes = document.querySelectorAll('.letter-box');
+                let draggedElement = null;
+                let initialX, initialY;
+                let lastHighlighted = null;
+
+                function clearHighlights() {
+                    document.querySelectorAll('.letter-box').forEach(box => {
+                        box.classList.remove('dragover');
+                    });
+                }
+
+                function highlightTarget(target) {
+                    if (lastHighlighted && lastHighlighted !== target) {
+                        lastHighlighted.classList.remove('dragover');
+                    }
+                    if (target && target.classList.contains('letter-box') && target !== draggedElement) {
+                        target.classList.add('dragover');
+                        lastHighlighted = target;
+                    }
+                }
 
                 letterBoxes.forEach(box => {
+                    // Mouse events
                     box.addEventListener('dragstart', function (e) {
                         this.classList.add('dragging');
                         e.dataTransfer.setData('text/plain', this.innerHTML);
                         e.dataTransfer.effectAllowed = 'move';
+                        draggedElement = this;
                     });
 
                     box.addEventListener('dragend', function () {
                         this.classList.remove('dragging');
+                        clearHighlights();
+                        draggedElement = null;
+                    });
+
+                    box.addEventListener('dragenter', function (e) {
+                        if (this !== draggedElement) {
+                            highlightTarget(this);
+                        }
+                    });
+
+                    box.addEventListener('dragleave', function (e) {
+                        if (this !== draggedElement) {
+                            this.classList.remove('dragover');
+                        }
                     });
 
                     box.addEventListener('dragover', function (e) {
                         e.preventDefault();
+                        if (this !== draggedElement) {
+                            highlightTarget(this);
+                        }
                     });
 
                     box.addEventListener('drop', function (e) {
                         e.preventDefault();
+                        clearHighlights();
 
-                        const draggedText = e.dataTransfer.getData('text/plain');
-                        const draggedElement = document.querySelector('.dragging');
-                        const targetText = this.innerHTML;
-
-                        // Swap the text content
-                        this.innerHTML = draggedText;
-                        draggedElement.innerHTML = targetText;
-
-                        // Check if word is correct after swap
-                        checkWord();
+                        if (this !== draggedElement) {
+                            const draggedText = draggedElement.innerHTML;
+                            draggedElement.innerHTML = this.innerHTML;
+                            this.innerHTML = draggedText;
+                            checkWord();
+                        }
                     });
+
+                    // Touch events
+                    box.addEventListener('touchstart', function (e) {
+                        e.preventDefault();
+                        draggedElement = this;
+                        this.classList.add('dragging');
+
+                        const touch = e.touches[0];
+                        initialX = touch.clientX;
+                        initialY = touch.clientY;
+                    }, { passive: false });
+
+                    box.addEventListener('touchmove', function (e) {
+                        if (!draggedElement) return;
+                        e.preventDefault();
+
+                        const touch = e.touches[0];
+                        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+
+                        // Highlight potential drop target
+                        highlightTarget(target);
+
+                        if (target && target.classList.contains('letter-box') && target !== draggedElement) {
+                            // Swap the content
+                            const tempText = draggedElement.innerHTML;
+                            draggedElement.innerHTML = target.innerHTML;
+                            target.innerHTML = tempText;
+                        }
+                    }, { passive: false });
+
+                    box.addEventListener('touchend', function (e) {
+                        if (!draggedElement) return;
+                        e.preventDefault();
+
+                        draggedElement.classList.remove('dragging');
+                        clearHighlights();
+                        checkWord();
+                        draggedElement = null;
+                    }, { passive: false });
+
+                    // Prevent default touchmove behavior to avoid scrolling
+                    box.addEventListener('touchmove', function (e) {
+                        e.preventDefault();
+                    }, { passive: false });
                 });
             }
+
+
 
             // Initialize display
             updateDisplay();
